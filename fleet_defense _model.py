@@ -5,86 +5,6 @@ import os
 import math
 from math import factorial
 
-# The number of intercepts by the attacked ship against the target
-# V_m  The average speed of the incoming target flight
-# V_w  Average speed of regional air defense missiles
-# t_p  Intercept effectiveness evaluation time
-# t_f  Regional air defense missile launch preparation time
-# R_max  Regional air defense missile deterrence zone
-# R_min  Regional Bound Zone of Air Defense Missiles
-# n_d  Resilience
-# s  The number of salvo missiles
-def N_b(V_m,V_w,t_p,t_f,R_max,R_min,n_d,s):
-    n_b= 1/(math.log(1+V_m/V_w))*math.log((R_max+V_w*(t_p+t_f))/(R_min+V_w*(t_p+t_f)))+1
-    n_b=int(n_b)
-    return min(n_b,int(n_d/s))
-
-# Air defense missile launch interval
-# Total air-to-air missile launch interval
-#t_jg Air Defense Missile Launch Interval
-# t_z transfer time
-def T_jg_hat(t_jg,t_z,n):
-    if n==1:
-        return t_jg
-    if n>1:
-        return t_jg+t_z
-
-# The number of intercepts a cover ship makes against a target
-# D  Queue spacing
-# theta  Formation Queue Angle
-# phi_B  incoming target relative to the attack ship’s entry angle
-# V_m  Strike target flying speed
-# V_w  Vessel Ship-to-Air Missile Flight Speed
-# R_qmax  Demarcation of the target area of the ship-to-air missile of the shield ship
-# R_jmax  Breach of the Kill Zone of the Short-range Air Defense Weapon System of the Assaulted Ship
-# P_max  The maximum route shortcut for the ship-to-air missile to the target
-# T_jg_hat  Total Launch Interval of Air Defense Missiles
-# n_d  The amount of charge
-# s  number of salvos per time
-
-def N_y(D,theta,V_m,V_w,phi_B,R_qmax,R_jmax,P_max,T_jg_hat,n_d,s):
-    K = 0
-    P = D*math.sin(theta-phi_B)
-    # print(P)
-    X_B = P
-    Y_B = D * math.cos(theta - phi_B)
-    # print("{}:{}".format(X_B, Y_B))
-    if P <= P_max:
-        K = 1
-        OT_2=R_qmax
-        while True:
-            X_T1 = P
-            Y_T1 = math.sqrt(OT_2 ** 2 - P ** 2)
-            # print("{}:{}".format(X_T1, Y_T1))
-
-            X_F1=P
-            Y_F1=Y_T1+R_qmax/V_w*V_m
-            # print("{}:{}".format(X_F1, Y_F1))
-
-            X_F2=P
-            Y_F2=Y_F1-V_m*T_jg_hat
-            # print("{}:{}".format(X_F2, Y_F2))
-
-            theta_f2=math.atan(X_F2/Y_F2)
-            OF_2=math.sqrt(X_F2**2+Y_F2**2)
-            BF_2=Y_F2-Y_B
-            theta_tao2=math.asin(V_m/V_w*math.sin(theta_f2))
-            # print(theta_f2,theta_tao2)
-            OT_2=OF_2*math.sin(theta_f2)/math.sin(math.pi-theta_f2-theta_tao2)
-            BT_2=math.sqrt(OT_2**2-P**2)-Y_B
-            # print(OT_2)
-            if BT_2 < R_jmax:
-                break
-            else:
-                K+=1
-            # print("K:{}".format(K))
-    return min(K,int(n_d/s))
-
-#Number of hit bullets
-def P_m(u,R,r_0):
-    pass
-
-
 ##############
 #Fleet defense model description
 ##############
@@ -169,32 +89,6 @@ def P(m,N_0,P_4_list):
     return result
 
 if __name__=='__main__':
-    V_m=100
-    V_w=1000
-    t_p=2
-    t_f=2
-    R_max=5000
-    R_min=200
-    n_d=30
-    s=3
-#The number of times the attacked ship intercepted the target
-    c_b=N_b(V_m,V_w,t_p,t_f,R_max,R_min,n_d,s)
-    print('c_b:{}'.format(c_b))
-# The number of times of interception of targets by the warship’s regional air defense missiles
-    target_nums=3
-    t_z=2
-    t_jg=2
-    T_jg_hat=T_jg_hat(t_jg, t_z, target_nums)
-    print("T_jg:{}".format(T_jg_hat))
-    D=2000
-    theta=math.pi*4/5
-    phi_B=math.pi*1/4
-    R_qmax=10000
-    R_jmax=5000
-    P_max=3000
-    c_y=N_y(D, theta, V_m, V_w, phi_B, R_qmax, R_jmax, P_max, T_jg_hat, n_d, s)
-    print("c_y:{}".format(c_y))
-
 #Fleet defense model description
     N_0=10
     P1=0.98
@@ -209,7 +103,7 @@ if __name__=='__main__':
     for N_2 in range(N_0+1):
         P_2_list.append(P_2i(N_0,N_2,P2,P_1_list))
     print("P_2_list:{}".format(P_2_list))
-    k_max=c_y+c_b
+    k_max=10
     P3 = 0.5
     # P_3_matrix=np.zeros((N_0,k_max))
     n= 8  # Fire channel number
