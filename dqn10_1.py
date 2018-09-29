@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import random
 from collections import deque
-import fire_ga_version_10
+import fire_ga_version_10_1
 
 # Hyper Parameters for DQN
 GAMMA = 0.9  # discount factor for target Q
@@ -65,7 +65,7 @@ class DQN():
         self.cost = tf.reduce_mean(tf.square(self.y_input - Q_action))
         self.optimizer = tf.train.AdamOptimizer(0.0001).minimize(self.cost)
 
-    def perceive(self, state, action, reward, next_state, done):
+    def perceive(self, state, action, reward, next_state, done,episode,step):
         one_hot_action = np.zeros(self.action_dim)
         one_hot_action[action] = 1
         self.replay_buffer.append((state, one_hot_action, reward, next_state, done))
@@ -73,9 +73,12 @@ class DQN():
             self.replay_buffer.popleft()
 
         if len(self.replay_buffer) > BATCH_SIZE:
-            self.train_Q_network()
+            self.can_training_state = self.train_Q_network(episode,step)
+            if self.can_training_state == False:
+                self.save()
+                return False
 
-    def train_Q_network(self):
+    def train_Q_network(self,episode, step):
         self.time_step += 1
         # Step 1: obtain random minibatch from replay memory
         minibatch = random.sample(self.replay_buffer, BATCH_SIZE)
@@ -93,11 +96,14 @@ class DQN():
                 y_batch.append(reward_batch[i])
             else:
                 y_batch.append(reward_batch[i] + GAMMA * np.max(Q_value_batch[i]))
-        print("cost:{}".format(self.cost.eval(feed_dict={
+        cost = self.cost.eval(feed_dict={
             self.y_input: y_batch,
             self.action_input: action_batch,
             self.state_input: state_batch
-        })))
+        })
+        print("episode:{},step:{},cost:{}".format(episode, step, cost,tf.reduce_sum(tf.multiply(self.Q_value, self.action_input), reduction_indices=1),self.y_input))
+        if cost < 0.1:
+            return False
         self.optimizer.run(feed_dict={
             self.y_input: y_batch,
             self.action_input: action_batch,
@@ -106,7 +112,7 @@ class DQN():
 
     def save(self):
         self.saver = tf.train.Saver()
-        self.save_path = self.saver.save(self.session, './model_version_10/model_ckpt')
+        self.save_path = self.saver.save(self.session, './model_version_10_1/model_ckpt')
         print("The saved path of checkpoint is {}.".format(self.save_path))
 
     def egreedy_action(self, state,step):
@@ -139,7 +145,7 @@ TEST = 10  # The number of experiment test every 100 episode
 
 def main():
     # initialize OpenAI Gym env and dqn agent
-    env = fire_ga_version_10.env()
+    env = fire_ga_version_10_1.env()
     agent = DQN(env)
     # env_initial = np.ones(10)
     # agent = DQN()
@@ -162,19 +168,21 @@ def main():
                 action = action
             # next_state,reward,done,_ = env.step(action)
             # print("state :{}".format(state))
-            else :
-                action = random.randint(0,(env.total_missiles+1)*(len(env.coordinates) * len(env.fleet_dict))-1)
+            elif  env.total_missiles < env.missile_number[int(action /(len(env.coordinates) * len(env.fleet_dict)))] and env.total_missiles >=1 :
+                action = random.randint(0,env.total_missiles*(len(env.coordinates) * len(env.fleet_dict))-1)
+            else:
+                action = len(env.coordinates) * len(env.fleet_dict)*len(env.missile_number)
 
             print("action: {}".format(action))
             # next_state, reward, done = env.step(action,step)
-            replayer_list,next_state = env.step(action, step)
+            replayer_list,next_state = env.step(action, step,episode)
                 # print("state :{}".format(state))
                 # Define reward for agent
                 # reward_agent = -1 if done else 0.1
             print("replayer_list:{},next_state:{}".format(replayer_list,next_state))
-            for state_r, action_r, reward_r, next_state_r, done_r,step_r in replayer_list:
-                print("train episode: {}, step: {},state:{},action:{},reward:{},next_state:{},done:{}".format(episode,step_r,state_r,action_r,reward_r,next_state_r,done_r))
-                agent.perceive(state_r, action_r, reward_r, next_state_r, done_r)
+            for state_r, action_r, reward_r, next_state_r, done_r,step_r,episode_r,P_m_r,N_0_r in replayer_list:
+                print("train episode: {}, step: {},state:{},action:{},reward:{},P_m:{},N_0:{},next_state:{},done:{}".format(episode_r,step_r,state_r,action_r,reward_r,P_m_r,N_0_r,next_state_r,done_r))
+                agent.perceive(state_r, action_r, reward_r, next_state_r, done_r,episode_r,step_r)
                 if done_r or (env.total_missiles <= 0 and len(env.flying_missiles_dict) ==0):
                     break_flag = True
                     break
@@ -195,20 +203,23 @@ def main():
                     # env.render()
                     print("state :{}".format(state))
                     action = agent.action(state)  # direct action for test
-                    if env.total_missiles >= env.missile_number[int(action /(len(env.coordinates) * len(env.fleet_dict)))]:
+                    if env.total_missiles >= env.missile_number[
+                        int(action / (len(env.coordinates) * len(env.fleet_dict)))]:
                         action = action
-                    # next_state,reward,done,_ = env.step(action)
-                    # print("state :{}".format(state))
+                        # next_state,reward,done,_ = env.step(action)
+                        # print("state :{}".format(state))
+                    elif env.total_missiles < env.missile_number[int(action / (len(env.coordinates) * len(env.fleet_dict)))] and env.total_missiles >= 1:
+                        action = random.randint(0,env.total_missiles * (len(env.coordinates) * len(env.fleet_dict)) - 1)
                     else:
-                        action = random.randint(0, (env.total_missiles + 1) * (len(env.coordinates) * len(env.fleet_dict)) - 1)
+                        action = len(env.coordinates) * len(env.fleet_dict) * len(env.missile_number)
 
                     print("action: {}".format(action))
                     # print("state: {}, action: {}".format(state,action))
                     # state,reward,done,_ = env.step(action)
                     # state, reward, done = env.step(action,j)
-                    replayer_list, next_state = env.step(action,j)
-                    for state_r, action_r, reward_r, next_state_r, done_r,step_r in replayer_list:
-                        print("test episode: {}, step: {}, action: {}, state: {}, reward: {}, done: {}".format(i, step_r,action_r,state_r,reward_r,done_r))
+                    replayer_list, next_state = env.step(action,j,TEST)
+                    for state_r, action_r, reward_r, next_state_r, done_r, step_r, episode_r, P_m_r, N_0_r in replayer_list:
+                        print("test episode: {}, step: {},state:{},action:{},reward:{},P_m:{},N_0:{},next_state:{},done:{}".format(episode_r, step_r, state_r, action_r, reward_r, P_m_r, N_0_r, next_state_r, done_r))
                         total_reward += reward_r
                         if done_r or (env.total_missiles <= 0 and len(env.flying_missiles_dict) == 0):
                             break_flag_test = True
@@ -224,12 +235,12 @@ def main():
             ave_reward = total_reward / TEST
             print('episode: ', episode, 'Evaluation Average Reward:', ave_reward)
             print("############# end test ##############")
-            if ave_reward >= 900:
-                success_count += 1
-            else:
-                success_count = 0
-            print("episode: {}, ave_reward: {}, success_count: {}".format(episode, ave_reward, success_count))
-            if success_count == 5:
+            # if ave_reward >= 900:
+            #     success_count += 1
+            # else:
+            #     success_count = 0
+            # print("episode: {}, ave_reward: {}, success_count: {}".format(episode, ave_reward, success_count))
+            if ave_reward >= 700:
                 print("SUCCESS!!!")
                 agent.save()
                 break

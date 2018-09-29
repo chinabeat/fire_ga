@@ -6,6 +6,7 @@ import math
 from math import factorial
 import random
 from itertools import combinations
+import time
 
 
 ##############
@@ -186,6 +187,11 @@ class missile(object):
         self.P_3_list = list()
         self.P_4_list = list()
         self.P_m = 0
+        self.state = [0]*60
+        self.action = [0]*960
+        self.next_state = [0]*60
+        self.reward = 0
+        self.done = False
 
     def print_all_member(self):
         for name,value in vars(self).items():
@@ -290,15 +296,15 @@ def step(action):
 
 class env():
     def __init__(self):
-        self.fleet_a = fleet(8, 20, 20, 18, 8 + 6 * math.sqrt(3))
-        self.fleet_b = fleet(8, 20, 20, 24, 8 + 4 * math.sqrt(3))
-        self.fleet_c = fleet(4, 15, 25, 12, 8 + 4 * math.sqrt(3))
-        self.fleet_d = fleet(4, 15, 25, 30, 8 + 2 * math.sqrt(3))
-        self.fleet_e = fleet(4, 15, 25, 6, 8 + 2 * math.sqrt(3))
-        self.fleet_f = fleet(4, 15, 25, 36, 8)
-        self.fleet_g = fleet(4, 15, 25, 0, 8)
-        self.fleet_h = fleet(4, 15, 25, 26, 0)
-        self.fleet_i = fleet(4, 15, 25, 10, 0)
+        self.fleet_a = fleet(8, 20, 25, 18, 8 + 6 * math.sqrt(3))
+        self.fleet_b = fleet(8, 20, 25, 24, 8 + 4 * math.sqrt(3))
+        self.fleet_c = fleet(4, 15, 30, 12, 8 + 4 * math.sqrt(3))
+        self.fleet_d = fleet(4, 15, 30, 30, 8 + 2 * math.sqrt(3))
+        self.fleet_e = fleet(4, 15, 30, 6, 8 + 2 * math.sqrt(3))
+        self.fleet_f = fleet(4, 15, 30, 36, 8)
+        self.fleet_g = fleet(4, 15, 30, 0, 8)
+        self.fleet_h = fleet(4, 15, 30, 26, 0)
+        self.fleet_i = fleet(4, 15, 30, 10, 0)
         self.fleet_j = fleet(0, 0, 0, 18, 8)
         self.fleet_dict = {
             0: self.fleet_a,
@@ -326,13 +332,13 @@ class env():
         #               "i": self.fleet_i,
         #               "j": self.fleet_j
         #               }
-        self.one_missile_fly_max_time = 500
-        self.total_missiles = 100
+        # self.one_missile_fly_max_time = 500
+        self.total_missiles = 10
         self.coordinates = [[x, -20] for x in range(-20, 61, 20)] + [[x, 60] for x in range(-20, 61, 20)] + [[-20, y] for y in range(0,41,20)] + [[60, y] for y in range(0, 41, 20)]
         # self.coordinates = [[x,-20] for x in range(-20, 61, 20)]+[[x,60] for x in range(-20,61,20)]+[[-20,y] for y in range(0,41,20)]+[[60,y] for y in range(0,41,20)]+[[]]
         # self.coordinates = [[-20,-20]]
         # print(len(self.coordinates))
-        self.missile_number = range(6)
+        self.missile_number = [5]
         # self.fire_coordinates = list()
         # temp = list()
         # for number in self.missile_number:
@@ -342,9 +348,9 @@ class env():
         # print("len fire_coordinates:{}".format(len(self.fire_coordinates)))
         # print([] in self.fire_coordinates)
         # print(self.fire_coordinates)
-        self.state = [1]*len(self.fleet_dict)+[time for f in self.fleet_dict.values() for time in f.fire_channels]+[self.total_missiles]+[0]
+        self.state = [1]*len(self.fleet_dict)
         self.state_dim = len(self.state)
-        self.action_dim = len(self.fleet_dict)*len(self.coordinates)*len(self.missile_number)
+        self.action_dim = int(calc_combination(len(self.fleet_dict),int(self.total_missiles/self.missile_number[0])) * pow(len(self.coordinates),int(self.total_missiles/self.missile_number[0])))
 
         self.done = False
         self.done_state = [0 for i in range(len(self.fleet_dict))]
@@ -357,15 +363,15 @@ class env():
         print("reset state:")
         for fleet in self.fleet_dict.keys():
             self.fleet_dict[fleet].reset_fire_channels()
-        self.total_missiles = 100
-        self.state = [1]*len(self.fleet_dict)+[time for fleet in self.fleet_dict.values() for time in fleet.fire_channels]+[self.total_missiles]+[0]
+        self.total_missiles = 15
+        self.state = [1]*len(self.fleet_dict)
         print("reset state:{}".format(self.state))
         self.done = False
         for v in self.fleet_dict.values():
             v.dead = False
         return self.state
 
-    def step(self,action,step):
+    def step(self,action):
         # a to a
         reward = 0
         # print("state",self.state)
@@ -373,7 +379,8 @@ class env():
         # coordinates = [[x, y] for x in range(-20, 61, 20) for y in range(-20, 41, 20)]
         coordinates = self.coordinates
         coordinates_count = len(coordinates)
-        targets = [i for i in range(len(fleet_dict))]
+
+        targets = list(combinations([i for i in range(len(fleet_dict))],3))
         # missile_number=range(1,6)
         missile_number = self.missile_number
         targets_count = len(targets)
@@ -384,165 +391,155 @@ class env():
         # coordinate = coordinates[(action-coordinates_count * targets_count*len(missile_number)*step) % (coordinates_count * targets_count) % coordinates_count]
         # target = targets[int((action-coordinates_count * targets_count*len(missile_number)*step)% (coordinates_count * targets_count) / coordinates_count)]
         # N_0 = missile_number[int((action-coordinates_count * targets_count*len(missile_number)*step) / (coordinates_count * targets_count))]
-        coordinate = coordinates[action % (coordinates_count * targets_count) % coordinates_count]
-        target = targets[int(action % (coordinates_count * targets_count) / coordinates_count)]
-        N_0 = missile_number[int(action / (coordinates_count * targets_count))]
+        # print(int(self.total_missiles/self.missile_number[0]))
+        # print(pow(coordinates_count,int(self.total_missiles/self.missile_number[0])-1))
+        # print(int(action%pow(coordinates_count,int(self.total_missiles/self.missile_number[0]))))
+        # coordinate = coordinates[action % (coordinates_count * targets_count) % coordinates_count]
+        coordinate = [coordinates[int(action%pow(coordinates_count,int(self.total_missiles/self.missile_number[0]))/pow(coordinates_count,int(self.total_missiles/self.missile_number[0])-1))],
+                      coordinates[int(action%pow(coordinates_count,int(self.total_missiles/self.missile_number[0]))%pow(coordinates_count,int(self.total_missiles/self.missile_number[0])-1)/coordinates_count)],
+                      coordinates[action%pow(coordinates_count,int(self.total_missiles/self.missile_number[0]))% pow(coordinates_count,int(self.total_missiles/self.missile_number[0])-1) %coordinates_count]]
+        target = targets[int(action/pow(coordinates_count,int(self.total_missiles/self.missile_number[0])))]
 
+        # N_0 = missile_number[int(action / (coordinates_count * targets_count))]
+        N_0 = missile_number[0]
         print ("coordinate:{}, target:{}, N_0:{}".format(coordinate, target,N_0))
-
-        for fleet in fleet_dict.keys():
-            for channel in range(len(fleet_dict[fleet].fire_channels)):
-                if fleet_dict[fleet].fire_channels[channel] > 0:
-                    fleet_dict[fleet].channel_unfreezing(channel)
-
-        if N_0 == 0:
-        # if N_0 == 0:
-            pass
-        else:
-            # if self.total_missiles<N_0:
-            missile_a = missile(coordinate[0], coordinate[1], target,N_0, 0.2)
-            # missile_a.print_all_member()
-            if fleet_dict[target].dead == True:
-                # P_m = -100.0
-                # state = self.state
-                reward = -100.0
-                self.state[-1] = step
-                # done = self.done
-                # print("P_m: {}".format(P_m))
-                # print("state :{},reward :{},done:{}".format(self.state,reward,self.done))
-                return self.state,reward,self.done
-
-            # fleet_list = [fleet_a, fleet_b, fleet_c, fleet_d, fleet_e, fleet_f, fleet_g, fleet_h, fleet_i, fleet_j]
-            # fleet_list_temp = fleet_list
-
-            # for fleet in fleet_dict.keys():
-            #     fleet_dict[fleet].reset_fire_channels()
-            # N_0 = 1
-            # [x,y] , target , N_0, distanceToFleet
-            self.flying_missiles_dict[step] = missile_a
-            self.total_missiles -= self.flying_missiles_dict[step].numbers
+        # missile_list = [missile(coordinate[i][0],coordinate[i][1],target[i],N_0,0.2) for i in range(self.total_missiles/self.missile_number[0])]
+        for i in range(int(self.total_missiles/self.missile_number[0])):
+            self.flying_missiles_dict[i] = missile(coordinate[i][0],coordinate[i][1],target[i],N_0,0.2)
 
             P1 = 0.98
             P_1_list = list()
-            for N_1 in range(self.flying_missiles_dict[step].numbers + 1):
-                P_1_list.append(P_1i(self.flying_missiles_dict[step].numbers, N_1, P1))
+            for N_1 in range(self.flying_missiles_dict[i].numbers + 1):
+                P_1_list.append(P_1i(self.flying_missiles_dict[i].numbers, N_1, P1))
                 # print('P_1i: {}'.format(P_1i(N_0,i,P1)))
-            self.flying_missiles_dict[step].P_1_list = P_1_list
+            self.flying_missiles_dict[i].P_1_list = P_1_list
             # print("P_1_list:{}".format(P_1_list))
 
             P2 = 0.8
             P_2_list = list()
-            for N_2 in range(self.flying_missiles_dict[step].numbers + 1):
-                P_2_list.append(P_2i(self.flying_missiles_dict[step].numbers, N_2, P2, P_1_list))
-            self.flying_missiles_dict[step].P_2_list = P_2_list
+            for N_2 in range(self.flying_missiles_dict[i].numbers + 1):
+                P_2_list.append(P_2i(self.flying_missiles_dict[i].numbers, N_2, P2, P_1_list))
+            self.flying_missiles_dict[i].P_2_list = P_2_list
             # print("P_2_list:{}".format(P_2_list))
 
-            self.flying_missiles_dict[step].P_3_input_list = P_2_list
+            self.flying_missiles_dict[i].P_3_input_list = P_2_list
 
-
-
-        will_be_pop_missile_list = list()
-        for k in self.flying_missiles_dict.keys():
-            if fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k]) <=0.2:
-                P4 = 0.5
-                P_MJZ = 0.7
-                N_MJZ = 10
-                T_MJZ = 5
-                n_mijizhen = P_MJZ * N_MJZ * T_MJZ
-                P_4_list = list()
-                for i in range(self.flying_missiles_dict[k].numbers + 1):
-                    P_4_list.append(P_4_i(self.flying_missiles_dict[k].numbers, i, n_mijizhen, self.flying_missiles_dict[k].P_3_input_list, P4))
-                self.flying_missiles_dict[k].P_4_list = P_4_list
-                # print("P_4_list:{}".format(P_4_list))
-
-                m = 1
-                self.flying_missiles_dict[k].P_m = P(m, self.flying_missiles_dict[k].numbers, self.flying_missiles_dict[k].P_4_list)
-                # print("P_m:{}".format(self.flying_missiles_dict[k].P_m))
-                self.P_total[self.flying_missiles_dict[k].target][0] += self.flying_missiles_dict[k].P_m
-                self.P_total[self.flying_missiles_dict[k].target][1] += self.flying_missiles_dict[k].numbers
-                # some_missiles_to_some_fleet_avg_pm = self.P_total[self.flying_missiles_dict[k].target][0]/self.P_total[self.flying_missiles_dict[k].target][1]
-                # print("some_missiles_to_some_fleet_avg_pm:{}, some_missiles_to_some_fleet_avg_pm>0.5:{}, coordinate :{},N_0:{},target:{}".
-                #       format(some_missiles_to_some_fleet_avg_pm,some_missiles_to_some_fleet_avg_pm>0.5,[self.flying_missiles_dict[k].x,self.flying_missiles_dict[k].y],
-                #              self.flying_missiles_dict[k].numbers,self.flying_missiles_dict[k].target))
-                if self.P_total[self.flying_missiles_dict[k].target][0] > 0.5:
-                    fleet_dict[self.flying_missiles_dict[k].target].died()
-                    print("Is fleet {} died? Answer:{} .".format(self.flying_missiles_dict[k].target, fleet_dict[self.flying_missiles_dict[k].target].dead))
-
-                    self.state[self.flying_missiles_dict[k].target] = 0
-                    # next_state = self.state
-                    # reward += self.P_total[self.flying_missiles_dict[k].target][0]/self.P_total[self.flying_missiles_dict[k].target][1] * 100 - self.flying_missiles_dict[k].numbers * 2
-                    reward += self.flying_missiles_dict[k].P_m * 100 - self.flying_missiles_dict[k].numbers * 2
-                    # done_state = [0 for i in range(len(fleet_dict))]
-                    if self.state[:self.state_dim] == self.done_state:
-                        self.done = True
-                    # info =
-                    # return self.state, reward, self.done
-                else:
-                    reward += -10.0 - self.flying_missiles_dict[k].numbers * 2
-                    # return self.state, reward, self.done
-
-                will_be_pop_missile_list.append(k)
-                # self.flying_missiles_dict.pop(k)
-                continue
-
-
-            # P1 = 0.98
-            # P_1_list = list()
-            # for N_1 in range(self.flying_missiles_dict[k].numbers + 1):
-            #     P_1_list.append(P_1i(self.flying_missiles_dict[k].numbers, N_1, P1))
-            #     # print('P_1i: {}'.format(P_1i(N_0,i,P1)))
-            # self.flying_missiles_dict[k].P_1_list = P_1_list
-            # print("P_1_list:{}".format(P_1_list))
-            #
-            # P2 = 0.8
-            # P_2_list = list()
-            # for N_2 in range(self.flying_missiles_dict[k].numbers + 1):
-            #     P_2_list.append(P_2i(self.flying_missiles_dict[k].numbers, N_2, P2, P_1_list))
-            # self.flying_missiles_dict[k].P_2_list = P_2_list
-            # print("P_2_list:{}".format(P_2_list))
-            #
-            #
-            # P_3_input_list = P_2_list
-
-
-            # missile_list = [missile_a]
-            # theta_a_target=missile_a.get_theta(fleet_dict[missile_a.target])
-
-            # distance_a_target = fleet_dict[missile_a.target].distance_to_missile(missile_a)
-            # print ("distance_a_target:{}".format(distance_a_target))
-            # fly_time = 0
-            # for distance in np.arange(distance_a_target, 0, -1 * missile_a.velocity):
-            # if fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k]) >0.2:
-            # while distance_a_target > 0:
-            #     print("distance_a_target:{}".format(distance_a_target))
-            #     for fleet in fleet_dict.keys():
-            #         for channel in  range(len(fleet_dict[fleet].fire_channels)) :
-            #             if fleet_dict[fleet].fire_channels[channel]>0:
-            #                 fleet_dict[fleet].channel_unfreezing(channel)
-            # if fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k]) >fleet_dict[missile_a.target].distance :
-            #     self.flying_missiles_dict[k].update_coordinate(1,fleet_dict[self.flying_missiles_dict[k].target])
-            #     # distance_a_target = fleet_dict[missile_a.target].distance_to_missile(missile_a)
-            #     continue
-
-            n = 0
-            # fly_time += 1
+        while len(self.flying_missiles_dict):
             for fleet in fleet_dict.keys():
-                if (fleet_dict[fleet].dead == False) and (
-                    fleet_dict[fleet].distance_to_missile(self.flying_missiles_dict[k]) < fleet_dict[fleet].distance):
-                    n += fleet_dict[fleet].channel_can_fire_count()
-            if (fleet_dict[self.flying_missiles_dict[k].target].dead == False) and (
-                fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k]) <
-                fleet_dict[fleet].distance):
-                if fleet_dict[self.flying_missiles_dict[k].target].channel_can_fire_count() >= \
-                        self.flying_missiles_dict[k].numbers:
-                    fleet_dict[self.flying_missiles_dict[k].target].use_channel(self.flying_missiles_dict[k].numbers)
+                for channel in range(len(fleet_dict[fleet].fire_channels)):
+                    if fleet_dict[fleet].fire_channels[channel] > 0:
+                        fleet_dict[fleet].channel_unfreezing(channel)
+            will_be_pop_missile_list = list()
+            for k in self.flying_missiles_dict.keys():
+                if fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k]) <= 0.2:
+                    P4 = 0.5
+                    P_MJZ = 0.7
+                    N_MJZ = 10
+                    T_MJZ = 5
+                    n_mijizhen = P_MJZ * N_MJZ * T_MJZ
+                    P_4_list = list()
+                    for i in range(self.flying_missiles_dict[k].numbers + 1):
+                        P_4_list.append(P_4_i(self.flying_missiles_dict[k].numbers, i, n_mijizhen,self.flying_missiles_dict[k].P_3_input_list, P4))
+                    self.flying_missiles_dict[k].P_4_list = P_4_list
+                    # print("P_4_list:{}".format(P_4_list))
+
+                    m = 1
+                    self.flying_missiles_dict[k].P_m = P(m, self.flying_missiles_dict[k].numbers,self.flying_missiles_dict[k].P_4_list)
+                    # print("P_m:{}".format(self.flying_missiles_dict[k].P_m))
+                    # self.P_total[self.flying_missiles_dict[k].target][0] += self.flying_missiles_dict[k].P_m
+                    # self.P_total[self.flying_missiles_dict[k].target][1] += self.flying_missiles_dict[k].numbers
+                    # some_missiles_to_some_fleet_avg_pm = self.P_total[self.flying_missiles_dict[k].target][0]/self.P_total[self.flying_missiles_dict[k].target][1]
+                    # print("some_missiles_to_some_fleet_avg_pm:{}, some_missiles_to_some_fleet_avg_pm>0.5:{}, coordinate :{},N_0:{},target:{}".
+                    #       format(some_missiles_to_some_fleet_avg_pm,some_missiles_to_some_fleet_avg_pm>0.5,[self.flying_missiles_dict[k].x,self.flying_missiles_dict[k].y],
+                    #              self.flying_missiles_dict[k].numbers,self.flying_missiles_dict[k].target))
+                    if self.flying_missiles_dict[k].P_m > 0.1:
+                        fleet_dict[self.flying_missiles_dict[k].target].died()
+                        print("Is fleet {} died? Answer:{} .".format(self.flying_missiles_dict[k].target, fleet_dict[
+                            self.flying_missiles_dict[k].target].dead))
+
+                        self.state[self.flying_missiles_dict[k].target] = 0
+                        # next_state = self.state
+                        # reward += self.P_total[self.flying_missiles_dict[k].target][0]/self.P_total[self.flying_missiles_dict[k].target][1] * 100 - self.flying_missiles_dict[k].numbers * 2
+                        reward += self.flying_missiles_dict[k].P_m * 100 
+                        # done_state = [0 for i in range(len(fleet_dict))]
+                        # if self.state.count(0) == self.total_missiles/self.missile_number[0]:
+                        #     self.done = True
+                            # info =
+                            # return self.state, reward, self.done
+                    else:
+                        reward += -10.0 
+                        # return self.state, reward, self.done
+
+                    will_be_pop_missile_list.append(k)
+                    # self.flying_missiles_dict.pop(k)
+                    continue
+
+                # P1 = 0.98
+                # P_1_list = list()
+                # for N_1 in range(self.flying_missiles_dict[k].numbers + 1):
+                #     P_1_list.append(P_1i(self.flying_missiles_dict[k].numbers, N_1, P1))
+                #     # print('P_1i: {}'.format(P_1i(N_0,i,P1)))
+                # self.flying_missiles_dict[k].P_1_list = P_1_list
+                # print("P_1_list:{}".format(P_1_list))
+                #
+                # P2 = 0.8
+                # P_2_list = list()
+                # for N_2 in range(self.flying_missiles_dict[k].numbers + 1):
+                #     P_2_list.append(P_2i(self.flying_missiles_dict[k].numbers, N_2, P2, P_1_list))
+                # self.flying_missiles_dict[k].P_2_list = P_2_list
+                # print("P_2_list:{}".format(P_2_list))
+                #
+                #
+                # P_3_input_list = P_2_list
+
+
+                # missile_list = [missile_a]
+                # theta_a_target=missile_a.get_theta(fleet_dict[missile_a.target])
+
+                # distance_a_target = fleet_dict[missile_a.target].distance_to_missile(missile_a)
+                # print ("distance_a_target:{}".format(distance_a_target))
+                # fly_time = 0
+                # for distance in np.arange(distance_a_target, 0, -1 * missile_a.velocity):
+                # if fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k]) >0.2:
+                # while distance_a_target > 0:
+                #     print("distance_a_target:{}".format(distance_a_target))
+                #     for fleet in fleet_dict.keys():
+                #         for channel in  range(len(fleet_dict[fleet].fire_channels)) :
+                #             if fleet_dict[fleet].fire_channels[channel]>0:
+                #                 fleet_dict[fleet].channel_unfreezing(channel)
+                # if fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k]) >fleet_dict[missile_a.target].distance :
+                #     self.flying_missiles_dict[k].update_coordinate(1,fleet_dict[self.flying_missiles_dict[k].target])
+                #     # distance_a_target = fleet_dict[missile_a.target].distance_to_missile(missile_a)
+                #     continue
+
+                n = 0
+                # fly_time += 1
+                for fleet in fleet_dict.keys():
+                    if (fleet_dict[fleet].dead == False) and (fleet_dict[fleet].distance_to_missile(self.flying_missiles_dict[k]) < fleet_dict[fleet].distance):
+                        n += fleet_dict[fleet].channel_can_fire_count()
+                if (fleet_dict[self.flying_missiles_dict[k].target].dead == False) and (fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k]) <fleet_dict[self.flying_missiles_dict[k].target].distance):
+                    if fleet_dict[self.flying_missiles_dict[k].target].channel_can_fire_count() >=self.flying_missiles_dict[k].numbers:
+                        fleet_dict[self.flying_missiles_dict[k].target].use_channel(self.flying_missiles_dict[k].numbers)
+                    else:
+                        N_0_residual = self.flying_missiles_dict[k].numbers - fleet_dict[self.flying_missiles_dict[k].target].channel_can_fire_count()
+                        fleet_dict[self.flying_missiles_dict[k].target].use_channel(fleet_dict[self.flying_missiles_dict[k].target].channel_can_fire_count())
+                        fleets = [x for x in range(10)]
+                        fleets.remove(self.flying_missiles_dict[k].target)
+                        random.shuffle(fleets)
+                        for fleet in fleets:
+                            if fleet_dict[fleet].dead == False and fleet_dict[fleet].distance_to_missile(self.flying_missiles_dict[k]) < fleet_dict[fleet].distance:
+                                if fleet_dict[fleet].channel_can_fire_count() >= N_0_residual:
+                                    fleet_dict[fleet].use_channel(N_0_residual)
+                                    break
+                                else:
+                                    N_0_residual -= fleet_dict[fleet].channel_can_fire_count()
+                                    fleet_dict[fleet].use_channel(fleet_dict[fleet].channel_can_fire_count())
+
                 else:
-                    fleet_dict[self.flying_missiles_dict[k].target].use_channel(
-                        fleet_dict[self.flying_missiles_dict[k].target].channel_can_fire_count())
-                    N_0_residual = self.flying_missiles_dict[k].numbers - fleet_dict[
-                        self.flying_missiles_dict[k].target].channel_can_fire_count()
+                    # fleet_dict[self.flying_missiles_dict[k].target].use_channel(fleet_dict[self.flying_missiles_dict[k].target].channel_can_fire_count())
+                    N_0_residual = self.flying_missiles_dict[k].numbers
                     fleets = [x for x in range(10)]
-                    fleets.remove(target)
+                    fleets.remove(self.flying_missiles_dict[k].target)
                     random.shuffle(fleets)
                     for fleet in fleets:
                         if fleet_dict[fleet].dead == False and fleet_dict[fleet].distance_to_missile(self.flying_missiles_dict[k]) < fleet_dict[fleet].distance:
@@ -550,89 +547,76 @@ class env():
                                 fleet_dict[fleet].use_channel(N_0_residual)
                                 break
                             else:
-                                fleet_dict[fleet].use_channel(fleet_dict[fleet].channel_can_fire_count())
                                 N_0_residual -= fleet_dict[fleet].channel_can_fire_count()
-            else:
-                # fleet_dict[self.flying_missiles_dict[k].target].use_channel(fleet_dict[self.flying_missiles_dict[k].target].channel_can_fire_count())
-                N_0_residual = self.flying_missiles_dict[k].numbers
-                fleets = [x for x in range(10)]
-                fleets.remove(target)
-                random.shuffle(fleets)
-                for fleet in fleets:
-                    if fleet_dict[fleet].dead == False and fleet_dict[fleet].distance_to_missile(self.flying_missiles_dict[k]) < fleet_dict[fleet].distance:
-                        if fleet_dict[fleet].channel_can_fire_count() >= N_0_residual:
-                            fleet_dict[fleet].use_channel(N_0_residual)
-                            break
-                        else:
-                            fleet_dict[fleet].use_channel(fleet_dict[fleet].channel_can_fire_count())
-                            N_0_residual -= fleet_dict[fleet].channel_can_fire_count()
+                                fleet_dict[fleet].use_channel(fleet_dict[fleet].channel_can_fire_count())
 
-            # print("n:", n)
+                                # print("n:", n)
 
 
-        # distance_a_target = fleet_dict[missile_a.target].distance_to_missile(missile_a)
-        # print ("distance_a_target:{}".format(distance_a_target))
-        # for distance in np.arange(distance_a_target, 0, -1 * missile_a.velocity * fleet_dict[missile_a.target].oc_time):
-        #     n = 0  # Fire channel number
-        #     # print ("distance:{}".format(distance))
-        #     # print (missile_a.x, " ", missile_a.y)
-        #     if distance > fleet_dict[missile_a.target].distance:
-        #         missile_a.update_coordinate(fleet_dict[missile_a.target].oc_time, fleet_dict[missile_a.target])
-        #         # print missile_a.x," ",missile_a.y
-        #         continue
-        #     for fleet in fleet_dict.keys():
-        #         # print ("fleet {} to the missile distance is {} .".format(fleet,fleet_dict[fleet].distance_to_missile(missile_a)))
-        #         if (fleet_dict[fleet].dead==False) and (fleet_dict[fleet].distance_to_missile(missile_a) < fleet_dict[fleet].distance ):
-        #             n += fleet_dict[fleet].fire_num
+                                # distance_a_target = fleet_dict[missile_a.target].distance_to_missile(missile_a)
+                                # print ("distance_a_target:{}".format(distance_a_target))
+                                # for distance in np.arange(distance_a_target, 0, -1 * missile_a.velocity * fleet_dict[missile_a.target].oc_time):
+                                #     n = 0  # Fire channel number
+                                #     # print ("distance:{}".format(distance))
+                                #     # print (missile_a.x, " ", missile_a.y)
+                                #     if distance > fleet_dict[missile_a.target].distance:
+                                #         missile_a.update_coordinate(fleet_dict[missile_a.target].oc_time, fleet_dict[missile_a.target])
+                                #         # print missile_a.x," ",missile_a.y
+                                #         continue
+                                #     for fleet in fleet_dict.keys():
+                                #         # print ("fleet {} to the missile distance is {} .".format(fleet,fleet_dict[fleet].distance_to_missile(missile_a)))
+                                #         if (fleet_dict[fleet].dead==False) and (fleet_dict[fleet].distance_to_missile(missile_a) < fleet_dict[fleet].distance ):
+                                #             n += fleet_dict[fleet].fire_num
 
-            # print ("n:", n)
-            P3 = 0.5
-            # P_3_matrix=np.zeros((N_0,k_max))
-            # n = 0  # Fire channel number
+                # print ("n:", n)
+                P3 = 0.5
+                # P_3_matrix=np.zeros((N_0,k_max))
+                # n = 0  # Fire channel number
 
-            # N_4=3
+                # N_4=3
 
-            # print(P_3_i_k(N_0,N_4,n,P_2_list,k_max,P3))
-            # P_3_list = list()
-            P_3_list = P_3_k(self.flying_missiles_dict[k].numbers, n, self.flying_missiles_dict[k].P_3_input_list, P3)
-            self.flying_missiles_dict[k].P_3_input_list = P_3_list
-            self.flying_missiles_dict[k].update_coordinate(1, fleet_dict[self.flying_missiles_dict[k].target])
-            # print("k:{}:coordinate:{},{},distance:{}".format(k, self.flying_missiles_dict[k].x,self.flying_missiles_dict[k].y,fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k])))
-            # distance_a_target = fleet_dict[missile_a.target].distance_to_missile(missile_a)
-            # print("P_3_list_out:{}".format(P_3_list))
-        if reward == 0:
-            reward -= 1
-        for k in will_be_pop_missile_list:
-            self.flying_missiles_dict.pop(k)
-        fire_channel_state = list()
-        for fleet in fleet_dict.values():
-            fire_channel_state.extend(fleet.fire_channels)
-            self.state[len(self.fleet_dict):] = fire_channel_state + [self.total_missiles,step]
-        # print("self.state:{}".format(self.state))
-        # print("state :{},reward :{},done:{}".format(self.state, reward, self.done))
-        return self.state, reward, self.done
-        #
-        # m = 1
-        # P_m = P(m, N_0, P_4_list)
-        # print("P_m:{}".format(P_m))
-        # if P_m > 0.3:
-        #     fleet_dict[target].died()
-        #     print ("Is fleet {} died? Answer:{} .".format(target, fleet_dict[target].dead))
-        #
-        #     self.state[target]=0
-        #     # next_state = self.state
-        #     reward = P_m*100 - N_0*2
-        #     # done_state = [0 for i in range(len(fleet_dict))]
-        #     if self.state[:self.state_dim] == self.done_state:
-        #         self.done = True
-        #     # info =
-        #     return self.state, reward, self.done
-        # else:
-        #     reward = -10.0 - N_0*3
-        #     return self.state, reward, self.done
+                # print(P_3_i_k(N_0,N_4,n,P_2_list,k_max,P3))
+                # P_3_list = list()
+                P_3_list = P_3_k(self.flying_missiles_dict[k].numbers, n, self.flying_missiles_dict[k].P_3_input_list,P3)
+                self.flying_missiles_dict[k].P_3_input_list = P_3_list
+                self.flying_missiles_dict[k].update_coordinate(1, fleet_dict[self.flying_missiles_dict[k].target])
+                # print("k:{}:coordinate:{},{},distance:{}".format(k, self.flying_missiles_dict[k].x,self.flying_missiles_dict[k].y,fleet_dict[self.flying_missiles_dict[k].target].distance_to_missile(self.flying_missiles_dict[k])))
+                # distance_a_target = fleet_dict[missile_a.target].distance_to_missile(missile_a)
+                # print("P_3_list_out:{}".format(P_3_list))
+            # if reward == 0:
+            #     reward -= 1
+            for k in will_be_pop_missile_list:
+                self.flying_missiles_dict.pop(k)
+            # fire_channel_state = list()
+            # for fleet in fleet_dict.values():
+            #     fire_channel_state.extend(fleet.fire_channels)
+            #     self.state[len(self.fleet_dict):] = fire_channel_state + [self.total_missiles, step]
+            # print("self.state:{}".format(self.state))
+            # print("state :{},reward :{},done:{}".format(self.state, reward, self.done))
+        if reward > 90:
+            self.done = True
+        # return self.state, reward, self.done
+        return self.state, reward, self.done, coordinate, target
 
 if __name__=="__main__":
     env=env()
+    max_reward = 0
+    max_coodinate = list()
+    max_target = tuple()
+    # start =  time.time()
+    for i in range(491520):
+        state,reward,done,coordinate,target=env.step(i)
+        if reward > max_reward:
+            print("current max action:{},state:{}.reward:{}.done:{},coordinate:{},target:{}".format(i,state,reward,done,coordinate,target))
+            max_reward =  reward
+            max_coodinate = coordinate
+            max_target = target
+        # if i%100 ==0:
+        #     end = time.time()
+        #     print("i:{},cost time:{}".format(i,(end-start)))
+        #     start = time.time()
+        # print(env.step(i))
+        env.reset()
     # while 1:
     #     action=random.choice(range(1000))
     #     print (env.step(action))
@@ -645,10 +629,10 @@ if __name__=="__main__":
     # step = 52
     # print("action = {}, step = {}".format(action, step))
     # print(env.step(action, step))
-    for step in range(100000):
-        action = random.randint(0,5*170-1)
-        print("action = {}, step = {}".format(action,step))
-        print(env.step(action,step))
+    # for step in range(100000):
+    #     action = random.randint(0,11519)
+    #     print("action = {}, step = {}".format(action,step))
+    #     print(env.step(action))
 
     # print(env.state)
     # for fleet in env.fleet_dict.values():

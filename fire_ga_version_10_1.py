@@ -189,10 +189,11 @@ class missile(object):
         self.state = [0]*59
         self.action = [0]*960
         self.next_state = [0]*59
-        self.reward = -2*numbers
+        self.reward = -numbers*0.1
         self.done = False
         self.update_next_state = True
         self.step = 0
+        self.episode = 0
 
     def print_all_member(self):
         for name,value in vars(self).items():
@@ -279,7 +280,7 @@ class env():
         # self.coordinates = [[x,-20] for x in range(-20, 61, 20)]+[[x,60] for x in range(-20,61,20)]+[[-20,y] for y in range(0,41,20)]+[[60,y] for y in range(0,41,20)]+[[]]
         # self.coordinates = [[-20,-20]]
         # print(len(self.coordinates))
-        self.missile_number = range(6)
+        self.missile_number = range(1,6)
         # self.fire_coordinates = list()
         # temp = list()
         # for number in self.missile_number:
@@ -289,7 +290,7 @@ class env():
         # print("len fire_coordinates:{}".format(len(self.fire_coordinates)))
         # print([] in self.fire_coordinates)
         # print(self.fire_coordinates)
-        self.state = [1]*len(self.fleet_dict)+[time for f in self.fleet_dict.values() for time in f.fire_channels]+[self.total_missiles]+[0]
+        self.state = [1]*len(self.fleet_dict)+[time for f in self.fleet_dict.values() for time in f.fire_channels]+[self.total_missiles]
         self.state_dim = len(self.state)
         self.action_dim = len(self.fleet_dict)*len(self.coordinates)*len(self.missile_number)
 
@@ -305,14 +306,14 @@ class env():
         for fleet in self.fleet_dict.keys():
             self.fleet_dict[fleet].reset_fire_channels()
         self.total_missiles = 100
-        self.state = [1]*len(self.fleet_dict)+[time for fleet in self.fleet_dict.values() for time in fleet.fire_channels]+[self.total_missiles]+[0]
+        self.state = [1]*len(self.fleet_dict)+[time for fleet in self.fleet_dict.values() for time in fleet.fire_channels]+[self.total_missiles]
         print("reset state:{}".format(self.state))
         self.done = False
         for v in self.fleet_dict.values():
             v.dead = False
         return self.state
 
-    def step(self,action,step):
+    def step(self,action,step,episode):
         # a to a
         reward = 0
         replayer_list = list()
@@ -326,9 +327,15 @@ class env():
         # missile_number=range(1,6)
         missile_number = self.missile_number
         targets_count = len(targets)
-        coordinate = coordinates[action % (coordinates_count * targets_count) % coordinates_count]
-        target = targets[int(action % (coordinates_count * targets_count) / coordinates_count)]
-        N_0 = missile_number[int(action / (coordinates_count * targets_count))]
+
+        if action == len(coordinates) * len(fleet_dict)*len(missile_number):
+            coordinate = coordinates[0]
+            target = targets[0]
+            N_0 = 0
+        else:
+            coordinate = coordinates[action % (coordinates_count * targets_count) % coordinates_count]
+            target = targets[int(action % (coordinates_count * targets_count) / coordinates_count)]
+            N_0 = missile_number[int(action / (coordinates_count * targets_count))]
 
         print ("coordinate:{}, target:{}, N_0:{}".format(coordinate, target,N_0))
 
@@ -342,13 +349,15 @@ class env():
             missile_a.state = self.state
             missile_a.action = action
             missile_a.step = step
-            missile_a.reward = -10
+            missile_a.episode = episode
+            # missile_a.reward = -10
         else:
         # if self.total_missiles<N_0:
             missile_a = missile(coordinate[0], coordinate[1], target,N_0, 0.2)
             missile_a.state = self.state
             missile_a.action = action
             missile_a.step = step
+            missile_a.episode = episode
 
             self.flying_missiles_dict[step] = missile_a
             self.total_missiles -= self.flying_missiles_dict[step].numbers
@@ -430,8 +439,9 @@ class env():
                     # P_m = -100.0
                     # state = self.state
                     self.flying_missiles_dict[k].reward += -100
-                    reward = -100-self.flying_missiles_dict[k].numbers*2
+                    reward = -100-self.flying_missiles_dict[k].numbers
                     # self.state[-1] = step
+
 
                 else:
                     P4 = 0.5
@@ -454,28 +464,27 @@ class env():
                     # print("some_missiles_to_some_fleet_avg_pm:{}, some_missiles_to_some_fleet_avg_pm>0.5:{}, coordinate :{},N_0:{},target:{}".
                     #       format(some_missiles_to_some_fleet_avg_pm,some_missiles_to_some_fleet_avg_pm>0.5,[self.flying_missiles_dict[k].x,self.flying_missiles_dict[k].y],
                     #              self.flying_missiles_dict[k].numbers,self.flying_missiles_dict[k].target))
-                    if self.flying_missiles_dict[k].P_m > 0.3:
+                    if self.flying_missiles_dict[k].P_m > 0.1:
                         fleet_dict[self.flying_missiles_dict[k].target].died()
                         print("Is fleet {} died? Answer:{} .".format(self.flying_missiles_dict[k].target, fleet_dict[self.flying_missiles_dict[k].target].dead))
 
                         self.state[self.flying_missiles_dict[k].target] = 0
                         # next_state = self.state
                         # reward += self.P_total[self.flying_missiles_dict[k].target][0]/self.P_total[self.flying_missiles_dict[k].target][1] * 100 - self.flying_missiles_dict[k].numbers * 2
-                        reward += self.flying_missiles_dict[k].P_m * 100 - self.flying_missiles_dict[k].numbers * 2
-                        self.flying_missiles_dict[k].reward += self.flying_missiles_dict[k].P_m * 100
+                        reward += self.flying_missiles_dict[k].P_m * 10 - self.flying_missiles_dict[k].numbers
+                        self.flying_missiles_dict[k].reward += self.flying_missiles_dict[k].P_m * 10
                         # done_state = [0 for i in range(len(fleet_dict))]
                         if self.state[:self.state_dim] == self.done_state:
                             self.done = True
                             self.flying_missiles_dict[k].done = True
-                            replayer_list.append(
-                                [self.flying_missiles_dict[k].state, self.flying_missiles_dict[k].action,
-                                 self.flying_missiles_dict[k].reward, self.flying_missiles_dict[k].next_state,
-                                 self.flying_missiles_dict[k].done,self.flying_missiles_dict[k].step])
+                            replayer_list.append([self.flying_missiles_dict[k].state, self.flying_missiles_dict[k].action,self.flying_missiles_dict[k].reward,
+                                                  self.flying_missiles_dict[k].next_state,self.flying_missiles_dict[k].done,self.flying_missiles_dict[k].step,
+                                                  self.flying_missiles_dict[k].episode,self.flying_missiles_dict[k].P_m,self.flying_missiles_dict[k].numbers])
                             will_be_pop_missile_list.append(k)
                             fire_channel_state = list()
                             for fleet in fleet_dict.values():
                                 fire_channel_state.extend(fleet.fire_channels)
-                                self.state[len(self.fleet_dict):] = fire_channel_state + [self.total_missiles]+[step]
+                                self.state[len(self.fleet_dict):] = fire_channel_state + [self.total_missiles]
                             for k in self.flying_missiles_dict.keys():
                                 if self.flying_missiles_dict[k].update_next_state == True:
                                     self.flying_missiles_dict[k].next_state = self.state
@@ -483,15 +492,19 @@ class env():
                             for k in will_be_pop_missile_list:
                                 self.flying_missiles_dict.pop(k)
                             for k in self.flying_missiles_dict.keys():
-                                replayer_list.append([self.flying_missiles_dict[k].state, self.flying_missiles_dict[k].action,self.flying_missiles_dict[k].reward, self.flying_missiles_dict[k].next_state,self.flying_missiles_dict[k].done,self.flying_missiles_dict[k].step])
+                                replayer_list.append([self.flying_missiles_dict[k].state, self.flying_missiles_dict[k].action,self.flying_missiles_dict[k].reward,
+                                                      self.flying_missiles_dict[k].next_state,self.flying_missiles_dict[k].done,self.flying_missiles_dict[k].step,
+                                                      self.flying_missiles_dict[k].episode,self.flying_missiles_dict[k].P_m,self.flying_missiles_dict[k].numbers])
                             return replayer_list,self.state
                         # info =
                         # return self.state, reward, self.done
                     else:
-                        reward += -10.0 - self.flying_missiles_dict[k].numbers * 2
-                        self.flying_missiles_dict[k].reward += -10.0
+                        reward += -1.0 - self.flying_missiles_dict[k].numbers
+                        self.flying_missiles_dict[k].reward += -1.0
                         # return self.state, reward, self.done
-                replayer_list.append([self.flying_missiles_dict[k].state,self.flying_missiles_dict[k].action,self.flying_missiles_dict[k].reward,self.flying_missiles_dict[k].next_state,self.flying_missiles_dict[k].done,self.flying_missiles_dict[k].step])
+                replayer_list.append([self.flying_missiles_dict[k].state,self.flying_missiles_dict[k].action,self.flying_missiles_dict[k].reward,
+                                      self.flying_missiles_dict[k].next_state,self.flying_missiles_dict[k].done,self.flying_missiles_dict[k].step,
+                                      self.flying_missiles_dict[k].episode,self.flying_missiles_dict[k].P_m,self.flying_missiles_dict[k].numbers])
                 will_be_pop_missile_list.append(k)
                     # self.flying_missiles_dict.pop(k)
 
@@ -501,11 +514,11 @@ class env():
         fire_channel_state = list()
         for fleet in fleet_dict.values():
             fire_channel_state.extend(fleet.fire_channels)
-            self.state[len(self.fleet_dict):] = fire_channel_state + [self.total_missiles]+[step]
-        missile_a.next_state = self.state
+            self.state[len(self.fleet_dict):] = fire_channel_state + [self.total_missiles]
+        # missile_a.next_state = self.state
         if missile_a.numbers == 0:
             missile_a.next_state = self.state
-            replayer_list.append([missile_a.state,missile_a.action,missile_a.reward,missile_a.next_state,missile_a.done,missile_a.step])
+            # replayer_list.append([missile_a.state,missile_a.action,missile_a.reward,missile_a.next_state,missile_a.done,missile_a.step,missile_a.episode,missile_a.P_m,missile_a.numbers])
         else:
             self.flying_missiles_dict[step].next_state = self.state
         # for k in self.flying_missiles_dict.keys():
@@ -522,7 +535,7 @@ if __name__=="__main__":
     for step in range(100000):
         action = random.randint(0,160-1)
         print("action = {}, step = {}".format(action,step))
-        print(env.step(action,step))
+        print(env.step(action,step,4))
 
 
 

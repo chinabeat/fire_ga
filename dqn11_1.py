@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import random
 from collections import deque
-import fire_ga_version_10
+import fire_ga_version_11_1
 
 # Hyper Parameters for DQN
 GAMMA = 0.9  # discount factor for target Q
@@ -106,10 +106,10 @@ class DQN():
 
     def save(self):
         self.saver = tf.train.Saver()
-        self.save_path = self.saver.save(self.session, './model_version_10/model_ckpt')
+        self.save_path = self.saver.save(self.session, './model_version_11_1.1/model_ckpt')
         print("The saved path of checkpoint is {}.".format(self.save_path))
 
-    def egreedy_action(self, state,step):
+    def egreedy_action(self, state):
         Q_value = self.Q_value.eval(feed_dict={
             self.state_input: [state]
         })[0]
@@ -131,108 +131,78 @@ class DQN():
 
 
 # ---------------------------------------------------------
-EPISODE = 10000  # Episode limitation
-STEP = 50000  # Step limitation in an episode
+EPISODE = 500000  # Episode limitation
+STEP = 1  # Step limitation in an episode
 TEST = 10  # The number of experiment test every 100 episode
 # TOTAL_MISSILES = 100
 
 
 def main():
     # initialize OpenAI Gym env and dqn agent
-    env = fire_ga_version_10.env()
+    env = fire_ga_version_11_1.env()
     agent = DQN(env)
     # env_initial = np.ones(10)
     # agent = DQN()
-    success_count = 0
+    # success_count = 0
     for episode in range(EPISODE):
         # initialize task
         state = env.reset()
         print("state :{}".format(state))
         print("episode: {}".format(episode))
         # Train
-        break_flag = False
         for step in range(STEP):
+            # state = env.reset()
             print("train episode: {}, step: {},env.total_missiles:{},len(env.flying_missiles_dict):{}".format(episode,step,env.total_missiles,len(env.flying_missiles_dict)))
             state = state
             # print("state :{}".format(state))
             print("state:{}".format(state))
-            action = agent.egreedy_action(state,step)  # e-greedy action for train
+            action = agent.egreedy_action(state)  # e-greedy action for train
             print("action:{}".format(action))
-            if env.total_missiles >= env.missile_number[int(action /(len(env.coordinates) * len(env.fleet_dict)))]:
-                action = action
-            # next_state,reward,done,_ = env.step(action)
-            # print("state :{}".format(state))
-            else :
-                action = random.randint(0,(env.total_missiles+1)*(len(env.coordinates) * len(env.fleet_dict))-1)
-
-            print("action: {}".format(action))
-            # next_state, reward, done = env.step(action,step)
-            replayer_list,next_state = env.step(action, step)
+            next_state, reward, done = env.step(action)
                 # print("state :{}".format(state))
                 # Define reward for agent
                 # reward_agent = -1 if done else 0.1
-            print("replayer_list:{},next_state:{}".format(replayer_list,next_state))
-            for state_r, action_r, reward_r, next_state_r, done_r,step_r in replayer_list:
-                print("train episode: {}, step: {},state:{},action:{},reward:{},next_state:{},done:{}".format(episode,step_r,state_r,action_r,reward_r,next_state_r,done_r))
-                agent.perceive(state_r, action_r, reward_r, next_state_r, done_r)
-                if done_r or (env.total_missiles <= 0 and len(env.flying_missiles_dict) ==0):
-                    break_flag = True
-                    break
-            if break_flag == True:
-                break
+            print("train episode: {}, step: {},state:{},action:{},reward:{},next_state:{},done:{}".format(episode,step,state, action, reward, next_state, done))
+            agent.perceive(state, action, reward, next_state, done)
             state = next_state
-            # if done or (env.total_missiles <= 0 and len(env.flying_missiles_dict) ==0):
-            #     break
+            if done :
+                break
         # Test every 100 episodes
         if episode % 100 == 0:
             print("########## start test ##########")
-            break_flag_test = False
             total_reward = 0
             for i in range(TEST):
                 state = env.reset()
                 for j in range(STEP):
+                    # state = env.reset()
                     print("test episode: {}, step: {}".format(i, j))
                     # env.render()
                     print("state :{}".format(state))
                     action = agent.action(state)  # direct action for test
-                    if env.total_missiles >= env.missile_number[int(action /(len(env.coordinates) * len(env.fleet_dict)))]:
-                        action = action
-                    # next_state,reward,done,_ = env.step(action)
-                    # print("state :{}".format(state))
-                    else:
-                        action = random.randint(0, (env.total_missiles + 1) * (len(env.coordinates) * len(env.fleet_dict)) - 1)
-
-                    print("action: {}".format(action))
                     # print("state: {}, action: {}".format(state,action))
                     # state,reward,done,_ = env.step(action)
-                    # state, reward, done = env.step(action,j)
-                    replayer_list, next_state = env.step(action,j)
-                    for state_r, action_r, reward_r, next_state_r, done_r,step_r in replayer_list:
-                        print("test episode: {}, step: {}, action: {}, state: {}, reward: {}, done: {}".format(i, step_r,action_r,state_r,reward_r,done_r))
-                        total_reward += reward_r
-                        if done_r or (env.total_missiles <= 0 and len(env.flying_missiles_dict) == 0):
-                            break_flag_test = True
-                            break
-                    if break_flag_test == True:
+                    state, reward, done = env.step(action)
+                    print("test episode: {}, step: {}, action: {}, state: {}, reward: {}, done: {}".format(i, j,action,state, reward, done))
+                    total_reward += reward
+                    print("test episode: {}, step: {},total_reward: {}".format(i, j,total_reward))
+                    if done :
                         break
-                    # print("test episode: {}, step: {}, action: {}, state: {}, reward: {}, done: {}".format(i, j,action,state, reward, done))
-                    state = next_state
-                    # total_reward += reward
-                    # print("test episode: {}, step: {},total_reward: {}".format(i, j,total_reward))
-                    # if done or (env.total_missiles <= 0 and len(env.flying_missiles_dict) ==0):
-                    #     break
             ave_reward = total_reward / TEST
             print('episode: ', episode, 'Evaluation Average Reward:', ave_reward)
             print("############# end test ##############")
-            if ave_reward >= 900:
-                success_count += 1
-            else:
-                success_count = 0
-            print("episode: {}, ave_reward: {}, success_count: {}".format(episode, ave_reward, success_count))
-            if success_count == 5:
+            if ave_reward >180:
                 print("SUCCESS!!!")
                 agent.save()
                 break
+            # if ave_reward >= 90:
+            #     success_count += 1
+            # else:
+            #     success_count = 0
+            # print("episode: {}, ave_reward: {}, success_count: {}".format(episode, ave_reward, success_count))
+            # if success_count == 5:
+            #     print("SUCCESS!!!")
+            #     agent.save()
+            #     break
 
 
 if __name__ == '__main__':
